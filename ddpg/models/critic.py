@@ -3,10 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class Critic(nn.Module):
-    '''
-    Critic is the value network that estimates the Q-value for given state-action pairs.
-    It takes the state dimension and action dimension as inputs.
-    '''
     def __init__(self, state_dim, action_dim):
         super().__init__()
         self.fc1 = nn.Linear(state_dim + action_dim, 400)
