@@ -12,7 +12,7 @@ def main():
     with open(config_path, 'r') as f:
         cfg = yaml.safe_load(f)
 
-    print(f"Starting Training: {cfg['env_name']}")
+    print(f"Starting training: {cfg['env_name']}")
     run_train(cfg)
 
 if __name__ == "__main__":
