@@ -37,10 +37,7 @@ class DDPGAgent:
         )
 
     def select_action(self, state):
-        """
-        Input state is a numpy array (C, H, W).
-        Output is a numpy array of actions.
-        """
+
         self.actor.eval()
         state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
         
@@ -52,10 +49,9 @@ class DDPGAgent:
             
         self.actor.train()
         return action
-
-    def save(self, folder_path, filename="./checkpoints/agent/ddpg_model.pth"):
-        if not os.path.exists(folder_path):
-            os.makedirs(folder_path)
+    
+    def save(self, folder_path, filename="ddpg_model.pth"):
+        os.makedirs(folder_path, exist_ok=True)
         
         save_dict = {
             'actor_state_dict': self.actor.state_dict(),
@@ -63,7 +59,9 @@ class DDPGAgent:
             'actor_optimizer': self.actor_optimizer.state_dict(),
             'critic_optimizer': self.critic_optimizer.state_dict()
         }
-        torch.save(save_dict, os.path.join(folder_path, filename))
+        save_path = os.path.join(folder_path, filename)
+        torch.save(save_dict, save_path)
+        print(f"--> Model saved to {save_path}")
 
     def load(self, file_path):
         if os.path.exists(file_path):
