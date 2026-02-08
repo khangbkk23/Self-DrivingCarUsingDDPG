@@ -4,10 +4,6 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 class Actor(nn.Module):
-    '''
-    Actor is policy network that maps states to actions.
-    It takes the state dimension, action dimension, and maximum action as inputs.
-    '''
     def __init__(self, state_dim, action_dim, max_action):
         super().__init__()
         self.fc1 = nn.Linear(state_dim, 400)
