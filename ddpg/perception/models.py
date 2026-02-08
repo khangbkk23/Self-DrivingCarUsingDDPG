@@ -37,7 +37,7 @@ class CNNEncoder(nn.Module):
             dummy_output = self.cnn(dummy_input)
             self.flatten_dim = dummy_output.view(1, -1).shape[1]
             
-        print(f"DEBUG: CNN Output Flatten Dim: {self.flatten_dim}")
+        print(f"CNN Output flatten dim: {self.flatten_dim}")
 
     def forward(self, x):
         x = self.cnn(x)
