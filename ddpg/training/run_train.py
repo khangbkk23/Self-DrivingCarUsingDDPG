@@ -1,5 +1,5 @@
 import os
-import gym
+import gymnasium as gym
 import torch
 import numpy as np
 from collections import deque
@@ -7,8 +7,8 @@ from torch.optim.lr_scheduler import StepLR
 
 from ddpg.agent import DDPGAgent
 from ddpg.replay_buffer import ReplayBuffer
-from training.trainer import Trainer
-from training.evaluator import Evaluator
+from trainer import Trainer
+from evaluator import Evaluator
 from utils.visualization import plot_learning_curve, plot_losses
 from utils.preprocess import ImagePreProcessor
 
