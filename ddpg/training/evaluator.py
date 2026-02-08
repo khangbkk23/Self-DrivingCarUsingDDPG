@@ -4,7 +4,7 @@ import numpy as np
 import gymnasium as gym
 import os
 from gymnasium.wrappers import RecordVideo
-from utils.preprocess import ImagePreProcessor
+from ddpg.utils.preprocess import ImagePreProcessor
 
 class Evaluator:
     def __init__(self, config, device):

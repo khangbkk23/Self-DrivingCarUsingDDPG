@@ -2,6 +2,7 @@ import os
 import gymnasium as gym
 import torch
 import numpy as np
+from tqdm import tqdm
 from collections import deque
 from torch.optim.lr_scheduler import StepLR
 
@@ -29,11 +30,12 @@ def run_train(cfg):
     actor_scheduler = StepLR(agent.actor_optimizer, step_size=20, gamma=0.5)
     critic_scheduler = StepLR(agent.critic_optimizer, step_size=20, gamma=0.5)
     
+    # Global tracking for visualization
     train_rewards = []
     eval_rewards = []
     eval_episodes = []
-    actor_losses = []
-    critic_losses = []
+    actor_losses_history = []
+    critic_losses_history = []
     
     best_eval_reward = -np.inf
     patience = cfg['training']['patience']
@@ -43,26 +45,29 @@ def run_train(cfg):
     scores_window = deque(maxlen=20)
     total_steps = 0
     save_path = cfg['training']['save_path']
-    os.makedirs(os.path.dirname(save_path), exist_ok=True)
     plot_path = "./results/plots/"
+    
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     os.makedirs(plot_path, exist_ok=True)
 
-    # training loop
-    for episode in range(1, cfg['training']['episodes'] + 1):
+    # Initialize progress bar
+    pbar = tqdm(range(1, cfg['training']['episodes'] + 1), desc="Training")
+
+    for episode in pbar:
         state, _ = env.reset()
         episode_reward = 0
+        step_losses_actor = []
+        step_losses_critic = []
         
         for t in range(cfg['training']['max_steps_per_episode']):
             total_steps += 1
             
-            # Action selection
+            # Action Selection
             if total_steps < 1000:
                 action = env.action_space.sample()
             else:
                 state_input = processor.process(state)
                 action = agent.select_action(state_input)
-                # Exploration Noise
                 noise = np.random.normal(0, 0.1, size=action_dim)
                 action = (action + noise).clip(env.action_space.low, env.action_space.high)
 
@@ -77,39 +82,59 @@ def run_train(cfg):
             # Optimization
             if replay_buffer.size > cfg['training']['batch_size']:
                 c_loss, a_loss = trainer.update_policy(replay_buffer, cfg['training']['batch_size'])
-                critic_losses.append(c_loss)
-                actor_losses.append(a_loss)
+                # Store in step-level for real-time display
+                step_losses_critic.append(c_loss)
+                step_losses_actor.append(a_loss)
+                # Store in global history for visualization
+                critic_losses_history.append(c_loss)
+                actor_losses_history.append(a_loss)
             
             if done: break
             
+        # Logging per episode
         train_rewards.append(episode_reward)
         scores_window.append(episode_reward)
+        
+        # Calculate mean losses for current episode to show in progress bar
+        avg_loss_a = np.mean(step_losses_actor) if step_losses_actor else 0
+        avg_loss_c = np.mean(step_losses_critic) if step_losses_critic else 0
+        
+        pbar.set_postfix({
+            "Rew": f"{episode_reward:.1f}",
+            "Avg": f"{np.mean(scores_window):.1f}",
+            "A_Loss": f"{avg_loss_a:.4f}"
+        })
 
-        # Evaluation and visualization
+        # Periodic Evaluation and Visualization
         if episode % 5 == 0:
             eval_reward = evaluator.evaluate(agent.actor, n_episodes=3)
             eval_rewards.append(eval_reward)
             eval_episodes.append(episode)
             
-            print(f"Episode {episode} | Train Avg: {np.mean(scores_window):.1f} | Eval: {eval_reward:.1f}")
+            # Use tqdm.write to avoid breaking the progress bar
+            tqdm.write(f"\n[Eval] Episode {episode} | Train Avg: {np.mean(scores_window):.1f} | Eval Reward: {eval_reward:.1f}")
             
             actor_scheduler.step()
             critic_scheduler.step()
             
+            # Plotting
             plot_learning_curve(train_rewards, eval_rewards, eval_episodes, plot_path)
-            plot_losses(actor_losses, critic_losses, plot_path)
+            plot_losses(actor_losses_history, critic_losses_history, plot_path)
             
-            # early stopping
+            # Early Stopping Check
             if eval_reward > (best_eval_reward + min_delta):
                 best_eval_reward = eval_reward
                 patience_counter = 0
                 torch.save(agent.actor.state_dict(), save_path)
-                print(f"--> Saved best model with reward: {best_eval_reward:.2f}")
+                tqdm.write(f"--> Saved best model (Reward: {best_eval_reward:.2f})")
+                
+                video_name = f"best_ep_{episode}_reward_{int(eval_reward)}"
+                evaluator.save_evaluation_video(agent.actor, filename_prefix=video_name)
             else:
                 patience_counter += 1
                 
             if patience_counter >= patience:
-                print(f"Early stopping triggered at episode {episode}")
+                tqdm.write(f"Early stopping triggered at episode {episode}")
                 break
                 
     env.close()
