@@ -1,24 +1,21 @@
 import os
 import gym
 import torch
-import yaml
 import numpy as np
 from collections import deque
 from torch.optim.lr_scheduler import StepLR
 
 from ddpg.agent import DDPGAgent
 from ddpg.replay_buffer import ReplayBuffer
-from ddpg.training.trainer import Trainer
-from ddpg.training.evaluator import Evaluator
+from training.trainer import Trainer
+from training.evaluator import Evaluator
+from utils.visualization import plot_learning_curve, plot_losses
+from utils.preprocess import ImagePreProcessor
 
-def load_config(path='./config/env.yaml'):
-    with open(path, 'r') as f:
-        return yaml.safe_load(f)
-
-def run_train():
-    cfg = load_config()
+def run_train(cfg):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
+    # 1. Environment and Agent Setup
     env = gym.make(cfg['env'], continuous=True)
     state_dim = env.observation_space.shape
     action_dim = env.action_space.shape[0]
@@ -28,12 +25,19 @@ def run_train():
     trainer = Trainer(agent, cfg, device)
     evaluator = Evaluator(cfg, device)
     replay_buffer = ReplayBuffer(state_dim, action_dim, max_size=cfg['buffer_size'])
+    processor = ImagePreProcessor()
     
-    # scheduler
+    # 2. Schedulers and Metrics Tracking
     actor_scheduler = StepLR(agent.actor_optimizer, step_size=20, gamma=0.5)
     critic_scheduler = StepLR(agent.critic_optimizer, step_size=20, gamma=0.5)
-
-	# early stopping
+    
+    train_rewards = []
+    eval_rewards = []
+    eval_episodes = []
+    actor_losses = []
+    critic_losses = []
+    
+    # 3. Training Controls
     best_eval_reward = -np.inf
     patience = cfg['training']['patience']
     patience_counter = 0
@@ -42,8 +46,11 @@ def run_train():
     scores_window = deque(maxlen=20)
     total_steps = 0
     save_path = cfg['training']['save_path']
+    plot_path = "./results/plots/"
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    os.makedirs(plot_path, exist_ok=True)
 
+    # 4. Main Loop
     for episode in range(1, cfg['training']['epoch'] + 1):
         state, _ = env.reset()
         episode_reward = 0
@@ -51,40 +58,51 @@ def run_train():
         for t in range(cfg['training']['max_steps_per_episode']):
             total_steps += 1
             
+            # Action Selection
             if total_steps < 1000:
                 action = env.action_space.sample()
             else:
-                state_input = state.transpose(2, 0, 1)
+                state_input = processor.process(state)
                 action = agent.select_action(state_input)
-
+                # Exploration Noise
                 noise = np.random.normal(0, 0.1, size=action_dim)
                 action = (action + noise).clip(env.action_space.low, env.action_space.high)
 
             next_state, reward, term, trunc, _ = env.step(action)
             done = term or trunc
             
-            # store experience in buffer
             replay_buffer.add(state, action, reward, next_state, done)
             
             state = next_state
             episode_reward += reward
             
+            # Optimization
             if replay_buffer.size > cfg['training']['batch_size']:
-                trainer.update_policy(replay_buffer, cfg['training']['batch_size'])
+                c_loss, a_loss = trainer.update_policy(replay_buffer, cfg['training']['batch_size'])
+                critic_losses.append(c_loss)
+                actor_losses.append(a_loss)
             
             if done: break
             
+        train_rewards.append(episode_reward)
         scores_window.append(episode_reward)
-        avg_train_score = np.mean(scores_window)
 
+        # 5. Periodic Evaluation and Visualization
         if episode % 5 == 0:
             eval_reward = evaluator.evaluate(agent.actor, n_episodes=3)
-            print(f"Episode {episode} | Train: {avg_train_score:.1f} | Eval: {eval_reward:.1f}")
+            eval_rewards.append(eval_reward)
+            eval_episodes.append(episode)
             
-
+            print(f"Episode {episode} | Train Avg: {np.mean(scores_window):.1f} | Eval: {eval_reward:.1f}")
+            
             actor_scheduler.step()
             critic_scheduler.step()
             
+            # Generate Plots
+            plot_learning_curve(train_rewards, eval_rewards, eval_episodes, plot_path)
+            plot_losses(actor_losses, critic_losses, plot_path)
+            
+            # Early Stopping and Checkpointing
             if eval_reward > (best_eval_reward + min_delta):
                 best_eval_reward = eval_reward
                 patience_counter = 0
@@ -99,6 +117,3 @@ def run_train():
                 
     env.close()
     evaluator.close()
-
-if __name__ == "__main__":
-    run_train()
