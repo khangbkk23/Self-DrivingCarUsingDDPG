@@ -11,7 +11,7 @@ class Trainer:
 
     def update_policy(self, replay_buffer, batch_size):
         # 1. Sample data
-        state, action, next_state, reward, done = replay_buffer.sample(batch_size)
+        state, action, next_state, reward, done = replay_buffer.sample(batch_size, self.device)
         
         # (B, H, W, C) -> (B, C, H, W)
         state = state.permute(0, 3, 1, 2).to(self.device) / 255.0

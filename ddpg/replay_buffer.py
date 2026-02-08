@@ -23,7 +23,9 @@ class ReplayBuffer:
         self.ptr = (self.ptr + 1) % self.max_size
         self.size = min(self.size + 1, self.max_size)
     
-    def sample(self, batch_size, device):
+    def sample(self, batch_size, device=None):
+        if device is None:
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         indices = np.random.choice(self.size, batch_size, replace=False)
 
         states = torch.FloatTensor(self.state[indices]).to(device) / 255.0

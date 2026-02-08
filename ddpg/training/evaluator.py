@@ -1,8 +1,10 @@
 from sqlalchemy import exists
 import torch
 import numpy as np
-import gym, os
-from gym.wrappers import RecordVideo
+import gymnasium as gym
+import os
+from gymnasium.wrappers import RecordVideo
+from utils.preprocess import ImagePreProcessor
 
 class Evaluator:
     def __init__(self, config, device):
@@ -45,26 +47,38 @@ class Evaluator:
         avg_reward = total_reward / n_episodes
         return avg_reward
     
-    def save_evaluation_video(self, actor, video_path="./videos/eval.mp4"):
+    def save_evaluation_video(self, actor, filename_prefix="best_model"):
         video_folder = "./videos/"
-        if not os.path.exists(video_folder):
-            os.makedir(video_folder, exist_ok=True)
-            
-        video_env = gym.make(self.env_name, continous=True, render_mode="rgb_array")
+        os.makedirs(video_folder, exist_ok=True)
+        env = gym.make(self.env_name, continuous=True, render_mode="rgb_array")
+
+        env = RecordVideo(
+            env, 
+            video_folder, 
+            name_prefix=filename_prefix,
+            episode_trigger=lambda x: True,
+            disable_logger=True
+        )
+
         actor.eval()
-        state, _ = video_env.reset()
+        processor = ImagePreProcessor()
+        state, _ = env.reset()
         done = False
+        
         while not done:
             with torch.no_grad():
-                state_input = self._preprocess(state)
-                action = actor(state_input).cpu().data.numpy().flatten()
+                state_input = processor.process(state)
+
+                state_tensor = torch.FloatTensor(state_input).unsqueeze(0).to(self.device)
+                state_tensor = ImagePreProcessor.normalize(state_tensor) # / 255.0
+                
+                action = actor(state_tensor).cpu().data.numpy().flatten()
             
-            state, reward, terminated, truncated, _ = video_env.step(action)
+            state, _, terminated, truncated, _ = env.step(action)
             done = terminated or truncated
-            
-        video_env.close()
-        actor.train()
-        print(f"Evaluation video saved to: {video_path}")
+        
+        env.close()
+        print(f"--> Video saved to {video_folder}{filename_prefix}-episode-0.mp4")
         
     def close(self):
         self.eval_env.close()

@@ -41,5 +41,5 @@ class CNNEncoder(nn.Module):
 
     def forward(self, x):
         x = self.cnn(x)
-        x = x.view(x.size(0), -1) # Flatten: (Batch, C, H, W) -> (Batch, Vector)
+        x = x.reshape(x.size(0), -1) # Flatten: (Batch, C, H, W) -> (Batch, Vector)
         return x

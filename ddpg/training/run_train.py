@@ -5,18 +5,17 @@ import numpy as np
 from collections import deque
 from torch.optim.lr_scheduler import StepLR
 
+from ddpg.training.trainer import Trainer
+from ddpg.training.evaluator import Evaluator
 from ddpg.agent import DDPGAgent
 from ddpg.replay_buffer import ReplayBuffer
-from trainer import Trainer
-from evaluator import Evaluator
-from utils.visualization import plot_learning_curve, plot_losses
-from utils.preprocess import ImagePreProcessor
+from ddpg.utils.visualization import plot_learning_curve, plot_losses
+from ddpg.utils.preprocess import ImagePreProcessor
 
 def run_train(cfg):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
-    # 1. Environment and Agent Setup
-    env = gym.make(cfg['env'], continuous=True)
+
+    env = gym.make(cfg['env_name'], continuous=True)
     state_dim = env.observation_space.shape
     action_dim = env.action_space.shape[0]
     max_action = float(env.action_space.high[0])
@@ -26,8 +25,7 @@ def run_train(cfg):
     evaluator = Evaluator(cfg, device)
     replay_buffer = ReplayBuffer(state_dim, action_dim, max_size=cfg['buffer_size'])
     processor = ImagePreProcessor()
-    
-    # 2. Schedulers and Metrics Tracking
+
     actor_scheduler = StepLR(agent.actor_optimizer, step_size=20, gamma=0.5)
     critic_scheduler = StepLR(agent.critic_optimizer, step_size=20, gamma=0.5)
     
@@ -37,7 +35,6 @@ def run_train(cfg):
     actor_losses = []
     critic_losses = []
     
-    # 3. Training Controls
     best_eval_reward = -np.inf
     patience = cfg['training']['patience']
     patience_counter = 0
@@ -46,19 +43,20 @@ def run_train(cfg):
     scores_window = deque(maxlen=20)
     total_steps = 0
     save_path = cfg['training']['save_path']
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
     plot_path = "./results/plots/"
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     os.makedirs(plot_path, exist_ok=True)
 
-    # 4. Main Loop
-    for episode in range(1, cfg['training']['epoch'] + 1):
+    # training loop
+    for episode in range(1, cfg['training']['episodes'] + 1):
         state, _ = env.reset()
         episode_reward = 0
         
         for t in range(cfg['training']['max_steps_per_episode']):
             total_steps += 1
             
-            # Action Selection
+            # Action selection
             if total_steps < 1000:
                 action = env.action_space.sample()
             else:
@@ -87,7 +85,7 @@ def run_train(cfg):
         train_rewards.append(episode_reward)
         scores_window.append(episode_reward)
 
-        # 5. Periodic Evaluation and Visualization
+        # Evaluation and visualization
         if episode % 5 == 0:
             eval_reward = evaluator.evaluate(agent.actor, n_episodes=3)
             eval_rewards.append(eval_reward)
@@ -98,11 +96,10 @@ def run_train(cfg):
             actor_scheduler.step()
             critic_scheduler.step()
             
-            # Generate Plots
             plot_learning_curve(train_rewards, eval_rewards, eval_episodes, plot_path)
             plot_losses(actor_losses, critic_losses, plot_path)
             
-            # Early Stopping and Checkpointing
+            # early stopping
             if eval_reward > (best_eval_reward + min_delta):
                 best_eval_reward = eval_reward
                 patience_counter = 0
