@@ -6,12 +6,12 @@ import numpy as np
 from collections import deque
 from torch.optim.lr_scheduler import StepLR
 
-from ddpg.models.agent import DDPGAgent
-from ddpg.models.replay_buffer import ReplayBuffer
-from training.trainer import Trainer
-from training.evaluator import Evaluator
+from ddpg.agent import DDPGAgent
+from ddpg.replay_buffer import ReplayBuffer
+from ddpg.training.trainer import Trainer
+from ddpg.training.evaluator import Evaluator
 
-def load_config(path='./ddpg/config/env.yaml'):
+def load_config(path='./config/env.yaml'):
     with open(path, 'r') as f:
         return yaml.safe_load(f)
 

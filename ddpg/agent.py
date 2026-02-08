@@ -2,8 +2,8 @@ import torch
 import torch.optim as optim
 import os
 
-from .actor import Actor
-from .critic import Critic
+from .models.actor import Actor
+from .models.critic import Critic
 
 class DDPGAgent:
     """
